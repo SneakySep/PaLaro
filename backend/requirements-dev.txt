@@ -1,0 +1,4 @@
+# --- Development / testing ---
+pytest
+httpx
+ruff

@@ -1,0 +1,17 @@
+# --- Core runtime (loose pins; freeze to requirements.lock.txt after a successful install) ---
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+SQLAlchemy
+psycopg[binary]
+alembic
+
+# --- ML / data ---
+numpy
+pandas
+scikit-learn
+xgboost
+
+# --- Ingestion ---
+nba_api
