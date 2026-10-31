@@ -30,19 +30,21 @@ FEATURE_COLUMNS: list[str] = [
     "away_b2b",
 ]
 
-#: Optional advanced per-game team metrics derived from box-score data.
-#: Included in the dataset only when the corresponding player stats exist.
+#: Optional advanced rolling box metrics derived from backfilled box-score data.
+#: These are trailing (lagged) averages — computed only from a team's *previous*
+#: games — so they never carry the current game's outcome into training. They are
+#: included in the dataset only when the corresponding player stats exist.
 BOX_METRIC_COLUMNS: list[str] = [
-    "home_team_efg",
-    "home_team_ts",
-    "home_team_ast",
-    "home_team_tov",
-    "home_team_reb",
-    "away_team_efg",
-    "away_team_ts",
-    "away_team_ast",
-    "away_team_tov",
-    "away_team_reb",
+    "home_roll_efg",
+    "home_roll_ts",
+    "home_roll_ast",
+    "home_roll_tov",
+    "home_roll_reb",
+    "away_roll_efg",
+    "away_roll_ts",
+    "away_roll_ast",
+    "away_roll_tov",
+    "away_roll_reb",
 ]
 
 #: The supervised target: 1 when the home team won, else 0.

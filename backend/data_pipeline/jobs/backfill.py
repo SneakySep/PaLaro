@@ -11,10 +11,46 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
+
+import requests
+from sqlalchemy import func, select
 
 from app.db.session import SessionLocal
+from app.models import Game, PlayerGameStat
 from data_pipeline.ingest.providers import NBA_APIProvider
 from data_pipeline.store.postgres_writer import PostgresWriter
+
+
+def _already_has_box(writer: PostgresWriter, nba_game_id: str) -> bool:
+    """True if a box score for this game is already persisted (resume support)."""
+    count = writer.session.scalar(
+        select(func.count(PlayerGameStat.id))
+        .select_from(Game)
+        .join(PlayerGameStat, PlayerGameStat.game_id == Game.id)
+        .where(Game.nba_game_id == nba_game_id)
+    )
+    return (count or 0) > 0
+
+
+def _fetch_box(provider: NBA_APIProvider, game_id: str, attempts: int = 5) -> dict:
+    """Fetch one box score, retrying transient network failures with backoff.
+
+    stats.nba.com intermittently rate-limits/briefly blocks rapid request
+    bursts; a short backoff ride it out instead of killing the whole backfill.
+    """
+    delay = 2.0
+    last: Exception | None = None
+    for i in range(attempts):
+        try:
+            return provider.get_box_score(game_id)
+        except requests.exceptions.RequestException as exc:
+            last = exc
+            print(f"    retry {i + 1}/{attempts} for {game_id} ({exc.__class__.__name__}) ...")
+            time.sleep(delay)
+            delay *= 2
+    assert last is not None
+    raise last
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -83,12 +119,32 @@ def run_backfill(args: argparse.Namespace) -> int:
             if box_score_budget is not None:
                 game_ids = game_ids[:box_score_budget]
 
-            for game_id in game_ids:
+            consecutive_failures = 0
+            for idx, game_id in enumerate(game_ids, start=1):
+                if not args.dry_run and _already_has_box(writer, game_id):
+                    print(f"  box score {game_id} already present; skipping")
+                    continue
                 print(f"  box score {game_id} ...")
-                box = provider.get_box_score(game_id)
+                try:
+                    box = _fetch_box(provider, game_id)
+                except requests.exceptions.RequestException as exc:
+                    consecutive_failures += 1
+                    print(f"  skipped {game_id}: {exc.__class__.__name__}")
+                    # A single bad/edge-case game shouldn't abort the season;
+                    # only bail out on a run of failures (e.g. a rate-limit block).
+                    if consecutive_failures >= 3:
+                        print("  aborting box-score pass: too many consecutive failures")
+                        break
+                    continue
+                consecutive_failures = 0
                 if not args.dry_run:
                     writer.upsert_box_scores([box])
                     total["box_scores"] += 1
+                    # Commit periodically so partial progress survives a crash,
+                    # a network hard-block, or an interrupted run.
+                    if idx % 50 == 0:
+                        writer.session.commit()
+                        print(f"  progress: committed {idx}/{len(game_ids)} games")
 
         if not args.dry_run:
             writer.session.commit()

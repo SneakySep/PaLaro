@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Game, PlayerGameStat
-from data_pipeline.features.advanced_metrics import team_box_metrics
+from data_pipeline.features.advanced_metrics import team_box_metrics, team_rolling_box
 from data_pipeline.features.context import team_context
 from data_pipeline.features.rolling import team_rolling
 from data_pipeline.features.schemas import (
@@ -117,6 +117,8 @@ def build_dataset(
         side_feats = side_feats.rename(
             columns={"rest_days": f"{side}_rest_days", "b2b": f"{side}_b2b"}
         )
+        # game_date is only needed for per-team ordering, done inside the helpers.
+        side_feats = side_feats.drop(columns=["game_date", "game_id"], errors="ignore")
         df = df.merge(
             side_feats,
             how="left",
@@ -125,7 +127,7 @@ def build_dataset(
         )
         df = df.drop(columns=["_game_id"])
 
-    # -- advanced per-(game, team) metrics from box scores --
+    # -- advanced rolling box metrics from backfilled box scores (no leakage) --
     has_stats = session.execute(
         select(PlayerGameStat.id).where(
             PlayerGameStat.game_id.in_(games["id"].tolist())
@@ -138,14 +140,29 @@ def build_dataset(
             ),
             session.bind,
         )
-        metrics = team_box_metrics(stats)
+        box_metrics = team_box_metrics(stats)
+        # Every team appearance (not just games with their own box score), so a
+        # game still gets trailing box features from its team's prior games.
+        appearances = pd.concat(
+            [
+                games[["id", "home_team_id", "game_date"]].rename(
+                    columns={"id": "game_id", "home_team_id": "team_id"}
+                ),
+                games[["id", "away_team_id", "game_date"]].rename(
+                    columns={"id": "game_id", "away_team_id": "team_id"}
+                ),
+            ],
+            ignore_index=True,
+        )
+        rolling_box = team_rolling_box(box_metrics, appearances, window)
+        # game_date is only needed for per-team ordering inside team_rolling_box.
+        rolling_box = rolling_box.drop(columns=["game_date"], errors="ignore")
         for side, team_col in (("home", "home_team_id"), ("away", "away_team_id")):
-            m = metrics.rename(
+            m = rolling_box.rename(columns={"game_id": "_game_id", "team_id": team_col})
+            m = m.rename(
                 columns={
-                    "game_id": "_game_id",
-                    "team_id": team_col,
-                    **{f"team_{c}": f"{side}_team_{c}"
-                       for c in ("efg", "ts", "pts", "ast", "tov", "reb")},
+                    f"roll_{c}": f"{side}_roll_{c}"
+                    for c in ("efg", "ts", "ast", "tov", "reb")
                 }
             )
             df = df.merge(

@@ -7,10 +7,7 @@ and are simply absent (NULL) when no box score exists for a game.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import pandas as pd
+import pandas as pd
 
 
 def team_box_metrics(stat_df: pd.DataFrame) -> pd.DataFrame:
@@ -58,3 +55,40 @@ def team_box_metrics(stat_df: pd.DataFrame) -> pd.DataFrame:
         }
     )
     return agg
+
+
+#: Per-game-team metrics we lag into rolling features (team_pts is redundant with
+#: the existing rolling point totals, so it is omitted).
+_ROLL_TEAM_METRICS = ("team_efg", "team_ts", "team_ast", "team_tov", "team_reb")
+
+
+def team_rolling_box(
+    metrics: pd.DataFrame,
+    appearances: pd.DataFrame,
+    window: int = 5,
+) -> pd.DataFrame:
+    """Zero-leakage trailing box metrics for every (game, team) appearance.
+
+    :param metrics: per-(``game_id``, ``team_id``) output of :func:`team_box_metrics`.
+    :param appearances: one row per (``game_id``, ``team_id``) for *every* team
+        appearance, with a ``game_date`` column. Includes games that lack their
+        own box score so their trailing features still come from prior games.
+    :param window: number of prior games to average.
+
+    For each team it lags each box metric by one game (``shift(1)``) and averages
+    over the trailing window, so a game's *own* box score never enters its own
+    features — no target leakage. Returns ``appearances`` plus ``roll_efg``,
+    ``roll_ts``, ``roll_ast``, ``roll_tov``, ``roll_reb`` columns.
+    """
+    m = appearances.merge(metrics, on=["game_id", "team_id"], how="left")
+
+    frames: list[pd.DataFrame] = []
+    for _, group in m.groupby("team_id", sort=False):
+        g = group.sort_values("game_date").copy()
+        for metric in _ROLL_TEAM_METRICS:
+            short = metric.removeprefix("team_")
+            g[f"roll_{short}"] = (
+                g[metric].shift(1).rolling(window, min_periods=1).mean()
+            )
+        frames.append(g)
+    return pd.concat(frames, ignore_index=True)
