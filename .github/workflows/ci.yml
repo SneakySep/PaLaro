@@ -75,6 +75,12 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
+      # next-env.d.ts and .next/types are generated and gitignored, so a fresh
+      # checkout has no route types yet. Generate them before tsc runs.
+      - name: Generate Next.js types
+        working-directory: frontend
+        run: npx next typegen
+
       - name: Type check
         working-directory: frontend
         run: npx tsc --noEmit
