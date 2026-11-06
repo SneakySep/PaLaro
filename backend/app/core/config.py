@@ -15,13 +15,11 @@ class Settings(BaseSettings):
     app_name: str = "PaLaro API"
     version: str = "0.1.0"
 
-    # Database — matches docker-compose defaults
-    database_url: str = (
-        "postgresql+psycopg://palaro:palaro_dev@localhost:5432/palaro"
-    )
+    # Database — must be set via DATABASE_URL in .env
+    database_url: str
 
-    # CORS — allow the Next.js dev server
-    cors_origins: list[str] = ["http://localhost:3000"]
+    # CORS — restrict to known origins; set via CORS_ORIGINS in .env
+    cors_origins: list[str] = []
 
     # ML
     model_version: str = "0.1.0"

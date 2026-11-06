@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 import numpy as np
 import pandas as pd
@@ -106,7 +107,7 @@ def _evaluate(
     auc: float | None = None
     if len(np.unique(y_test)) > 1:
         auc = float(roc_auc_score(y_test, proba))
-    importance = dict(zip(feature_columns, model.feature_importances_.astype(float)))
+    importance = dict(zip(feature_columns, model.feature_importances_.astype(float), strict=True))
     return accuracy, ll, auc, importance
 
 
@@ -140,8 +141,13 @@ def train_model(
     accuracy, ll, auc, importance = _evaluate(model, split.X_test, split.y_test,
                                               dataset.feature_columns)
 
+    version = (
+        f"{settings.model_version}-"
+        f"{datetime.now(UTC):%Y%m%d%H%M%S}"
+    )
+
     report = EvalReport(
-        version=settings.model_version,
+        version=version,
         n_train=len(split.X_train),
         n_test=len(split.X_test),
         accuracy=accuracy,

@@ -69,7 +69,7 @@ def test_convert_line_full_row():
         "AST": 8,
         "STL": 2,
         "BLK": 1,
-        "TOV": 3,
+        "TO": 3,
         "PF": 2,
         "FGM": 10,
         "FGA": 19,
@@ -85,6 +85,9 @@ def test_convert_line_full_row():
     assert line["points"] == 28
     assert line["fg_att"] == 19
     assert line["minutes"] == pytest.approx(37.18, abs=0.01)
+    # Regression: the raw column is "TO", not "TOV". Reading the wrong key
+    # produced None for every player and silently zeroed the turnover features.
+    assert line["turnovers"] == 3
 
 
 def test_convert_line_skips_blank_stats():
@@ -94,3 +97,60 @@ def test_convert_line_skips_blank_stats():
     line = provider._convert_line("0022300002", raw)
     assert line["points"] is None
     assert line["rebounds"] is None
+
+
+def test_game_from_scoreboard_item_scheduled():
+    item = {
+        "gameId": "0022500061",
+        "gameStatus": 1,
+        "gameStatusText": "7:00 pm ET",
+        "homeTeam": {"teamTricode": "PHX", "score": 0},
+        "awayTeam": {"teamTricode": "ORL", "score": 0},
+    }
+    game = NBA_APIProvider._game_from_scoreboard_item(item, "2026-11-05")
+    assert game["status"] == "scheduled"
+    # Not-started games report score 0 — it must become None, not 0.
+    assert game["home_points"] is None
+    assert game["away_points"] is None
+    assert game["home_abbr"] == "PHX"
+    assert game["away_abbr"] == "ORL"
+    assert game["season"] == 2026
+
+
+def test_game_from_scoreboard_item_final():
+    item = {
+        "gameId": "0022301234",
+        "gameStatus": 3,
+        "gameStatusText": "Final",
+        "homeTeam": {"teamTricode": "BOS", "score": 132},
+        "awayTeam": {"teamTricode": "WAS", "score": 122},
+    }
+    game = NBA_APIProvider._game_from_scoreboard_item(item, "2024-04-14")
+    assert game["status"] == "final"
+    assert game["home_points"] == 132
+    assert game["away_points"] == 122
+    # April game → the season that started the previous year (2023-24).
+    assert game["season"] == 2023
+
+
+def test_game_from_scoreboard_item_live():
+    item = {
+        "gameId": "0022500062",
+        "gameStatus": 2,
+        "gameStatusText": "Q3",
+        "homeTeam": {"teamTricode": "LAL", "score": 71},
+        "awayTeam": {"teamTricode": "GSW", "score": 68},
+    }
+    game = NBA_APIProvider._game_from_scoreboard_item(item, "2026-01-10")
+    assert game["status"] == "live"
+    assert game["home_points"] == 71
+    assert game["away_points"] == 68
+
+
+def test_season_from_date():
+    season_of = NBA_APIProvider._season_from_date
+    assert season_of("2023-10-24") == 2023   # October → that year
+    assert season_of("2024-04-14") == 2023   # April → previous year's label
+    assert season_of("2024-06-30") == 2023   # Finals still 2023-24
+    assert season_of("2024-07-01") == 2024   # July → next season begins
+    assert season_of("2026-11-05") == 2026

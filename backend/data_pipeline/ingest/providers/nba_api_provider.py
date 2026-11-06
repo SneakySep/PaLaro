@@ -14,6 +14,11 @@ Notes
 from __future__ import annotations
 
 import time
+from datetime import date
+from typing import ClassVar
+
+from data_pipeline.ingest.providers.base import DataProvider
+from data_pipeline.ingest.schemas import BoxScore, GameDict, PlayerLineDict, TeamDict
 
 
 def _to_int(value) -> int | None:
@@ -43,7 +48,10 @@ _RAW_TO_LINE = {
     "AST": "assists",
     "STL": "steals",
     "BLK": "blocks",
-    "TOV": "turnovers",
+    # BoxScoreTraditionalV2 names this column "TO", not "TOV". Using the wrong
+    # key silently yielded None for every player, which made the rolling
+    # turnover features constant zero in both training and serving.
+    "TO": "turnovers",
     "PF": "personal_fouls",
     "FGM": "fg_made",
     "FGA": "fg_att",
@@ -69,10 +77,6 @@ _INT_FIELDS = {
     "ft_made",
     "ft_att",
 }
-
-
-from data_pipeline.ingest.providers.base import DataProvider
-from data_pipeline.ingest.schemas import BoxScore, GameDict, PlayerLineDict, TeamDict
 
 
 def _minutes(value) -> float | None:
@@ -180,6 +184,62 @@ class NBA_APIProvider(DataProvider):
             home_points=home_pts,
             away_points=away_pts,
         )
+
+    # -- scoreboard (daily slate) -----------------------------------------------
+    #: ScoreboardV3 ``gameStatus`` codes mapped onto our status strings.
+    _GAME_STATUS_MAP: ClassVar[dict[int, str]] = {1: "scheduled", 2: "live", 3: "final"}
+
+    def get_scoreboard(self, game_date: str) -> list[GameDict]:
+        """Return every game on ``game_date`` (``"YYYY-MM-DD"``, ET) as GameDicts.
+
+        Uses :class:`ScoreboardV3`, which serves past and future slates alike,
+        so the same call covers historical results and upcoming scheduled games.
+        """
+        from nba_api.stats.endpoints import ScoreboardV3
+
+        raw = ScoreboardV3(game_date=game_date, timeout=30).get_dict()
+        board = raw.get("scoreboard", {})
+        return [
+            self._game_from_scoreboard_item(item, game_date)
+            for item in board.get("games", [])
+        ]
+
+    @classmethod
+    def _game_from_scoreboard_item(cls, item: dict, game_date: str) -> GameDict:
+        """Convert one ScoreboardV3 game entry into a :class:`GameDict`."""
+        home, away = item.get("homeTeam") or {}, item.get("awayTeam") or {}
+        status = cls._status_from_item(item)
+        scored = status in ("final", "live")  # not-started games report score 0
+        return GameDict(
+            nba_game_id=str(item["gameId"]),
+            season=cls._season_from_date(game_date),
+            game_date=game_date,
+            status=status,
+            home_abbr=str(home.get("teamTricode") or ""),
+            away_abbr=str(away.get("teamTricode") or ""),
+            home_points=_to_int(home.get("score")) if scored else None,
+            away_points=_to_int(away.get("score")) if scored else None,
+        )
+
+    @classmethod
+    def _status_from_item(cls, item: dict) -> str:
+        """Map ScoreboardV3's ``gameStatus`` code (1/2/3) onto our statuses."""
+        try:
+            return cls._GAME_STATUS_MAP.get(int(item.get("gameStatus")), "scheduled")
+        except (TypeError, ValueError):
+            text = str(item.get("gameStatusText") or "")
+            return "final" if text.lower().startswith("final") else "scheduled"
+
+    @staticmethod
+    def _season_from_date(game_date: str) -> int:
+        """NBA season label (its start year) for an ISO date.
+
+        July-December games belong to the season starting that year; January-
+        June games belong to the season that started the previous year (the
+        ``"2023-24"`` season is labelled ``2023``).
+        """
+        d = date.fromisoformat(game_date)
+        return d.year if d.month >= 7 else d.year - 1
 
     # -- box score -------------------------------------------------------------
     def get_box_score(self, game_id: str) -> BoxScore:

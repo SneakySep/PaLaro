@@ -10,11 +10,15 @@ __pycache__/
 .venv/
 backend/.venv/
 .pytest_cache/
+**/.pytest_cache/
 .mypy_cache/
 .ruff_cache/
+**/.ruff_cache/
 .ipynb_checkpoints/
 backend/ml/model_artifacts/
 *.lock
+# ...but the pinned dependency lock IS committed; it is what CI installs from.
+!requirements.lock.txt
 
 # ---- node / next ----
 node_modules/
@@ -30,6 +34,7 @@ Thumbs.db
 *.log
 .idea/
 .vscode/
+.perch/
 
 # PaLaro-specific env files (never commit real secrets)
 backend/.env

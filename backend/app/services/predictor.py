@@ -6,12 +6,17 @@ math live here so they can be unit-tested in isolation and reused by any caller.
 
 from __future__ import annotations
 
+import logging
+import math
+
 import pandas as pd
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from xgboost.core import XGBoostError
 
 from app.core.config import settings
 from data_pipeline.training.model import ModelArtifact
+
+logger = logging.getLogger(__name__)
 
 
 class PredictRequest(BaseModel):
@@ -27,6 +32,17 @@ class PredictRequest(BaseModel):
     home_team: str
     away_team: str
     features: dict[str, float]
+
+    @field_validator("features")
+    @classmethod
+    def validate_features(cls, v: dict[str, float]) -> dict[str, float]:
+        """Reject NaN or infinite values early with a clear message."""
+        for key, val in v.items():
+            if not isinstance(val, (int, float)):
+                raise ValueError(f"feature '{key}' must be numeric, got {type(val).__name__}")
+            if math.isnan(val) or math.isinf(val):
+                raise ValueError(f"feature '{key}' must be finite, got {val}")
+        return v
 
 
 class PredictionResponse(BaseModel):
@@ -105,6 +121,14 @@ def predict(request: PredictRequest) -> PredictionResponse:
     artifact = get_artifact()
     frame = aligned_feature_frame(request.features, artifact.feature_columns)
     prob = float(artifact.model.predict_proba(frame)[0, 1])
+    logger.info(
+        "prediction game=%s %s vs %s prob=%.4f model=%s",
+        request.game_id,
+        request.home_team,
+        request.away_team,
+        prob,
+        artifact.version,
+    )
     return PredictionResponse(
         game_id=request.game_id,
         home_team=request.home_team,

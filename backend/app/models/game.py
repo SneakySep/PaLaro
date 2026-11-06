@@ -20,7 +20,7 @@ class Game(Base):
     nba_game_id: Mapped[str] = mapped_column(String(10), unique=True, index=True)
     season: Mapped[int] = mapped_column(Integer, index=True)
     game_date: Mapped[date] = mapped_column(Date, index=True)
-    status: Mapped[str] = mapped_column(String(20), default="scheduled")
+    status: Mapped[str] = mapped_column(String(20), default="scheduled", index=True)
 
     home_team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"), index=True)
     away_team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"), index=True)

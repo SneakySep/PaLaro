@@ -8,4 +8,5 @@ class Base(DeclarativeBase):
 
 
 # Import models so they are registered on Base.metadata before autogenerate runs.
-from app.models import game, player_game, team  # noqa: F401
+# Must come after Base is defined, so E402 is expected here.
+from app.models import game, player_game, team  # noqa: E402, F401

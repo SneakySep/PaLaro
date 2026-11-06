@@ -27,3 +27,15 @@ class DataProvider(ABC):
     @abstractmethod
     def get_box_score(self, game_id: str) -> BoxScore:
         """Return the full box score (per-player lines) for a single game."""
+
+    @abstractmethod
+    def get_scoreboard(self, game_date: str) -> list[GameDict]:
+        """Return the slate of games for one calendar day.
+
+        ``game_date`` is an ISO date (``"YYYY-MM-DD"``; stats.nba.com interprets
+        it in US Eastern time). Games that have not started come back with
+        ``status="scheduled"`` and ``None`` scores; in-progress games are
+        ``"live"``; finished ones are ``"final"`` with final scores. Works for
+        past and future dates alike, so one call seeds both historical results
+        and upcoming scheduled games.
+        """

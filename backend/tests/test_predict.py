@@ -89,7 +89,8 @@ def test_predict_service_returns_sane_probability(trained_artifact) -> None:
     assert 0.0 <= resp.home_win_prob <= 1.0
     lo, hi = resp.confidence_interval
     assert lo <= resp.home_win_prob <= hi
-    assert resp.model_version == "0.1.0"
+    # The trainer stamps a UTC build suffix onto the configured base version.
+    assert resp.model_version.startswith(settings.model_version)
 
     # Reorders consistently with the trained feature list (no exception).
     shuffled = {**req.features}

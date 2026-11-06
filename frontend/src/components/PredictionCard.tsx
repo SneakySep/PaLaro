@@ -1,9 +1,9 @@
 import { motion } from "framer-motion";
-import type { PredictionResponse } from "@/lib/types";
+import type { UpcomingPrediction } from "@/lib/types";
 import { WinProbabilityBar } from "./ui/WinProbabilityBar";
 
 interface PredictionCardProps {
-  prediction: PredictionResponse;
+  prediction: UpcomingPrediction;
   index?: number;
 }
 
@@ -23,9 +23,17 @@ export function PredictionCard({ prediction, index = 0 }: PredictionCardProps) {
           {prediction.home_team} <span className="text-zinc-400">vs</span>{" "}
           {prediction.away_team}
         </h3>
-        <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-          {prediction.model_version}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+            {new Date(`${prediction.game_date}T12:00:00Z`).toLocaleDateString(
+              "en-US",
+              { weekday: "short", month: "short", day: "numeric" }
+            )}
+          </span>
+          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+            {prediction.model_version}
+          </span>
+        </div>
       </div>
 
       <WinProbabilityBar

@@ -33,7 +33,7 @@ class Dataset(NamedTuple):
     target_column: str
 
 
-def _load_games(session: Session, seasons: list[int] | None) -> pd.DataFrame:
+def load_final_games(session: Session, seasons: list[int] | None) -> pd.DataFrame:
     stmt = select(Game).where(Game.status == "final")
     if seasons:
         stmt = stmt.where(Game.season.in_(seasons))
@@ -56,7 +56,7 @@ def _load_games(session: Session, seasons: list[int] | None) -> pd.DataFrame:
     )
 
 
-def _team_appearances(games: pd.DataFrame) -> pd.DataFrame:
+def team_appearances(games: pd.DataFrame) -> pd.DataFrame:
     """One row per team-per-game with that team's own result context."""
     home = games.rename(
         columns={
@@ -77,6 +77,20 @@ def _team_appearances(games: pd.DataFrame) -> pd.DataFrame:
     return app[["game_id", "team_id", "game_date", "pts_for", "pts_against", "win"]]
 
 
+def load_box_stats(session: Session, games: pd.DataFrame) -> pd.DataFrame:
+    """Load per-player stats for ``games`` (empty frame if none are backfilled)."""
+    ids = games["id"].tolist()
+    has_stats = session.execute(
+        select(PlayerGameStat.id).where(PlayerGameStat.game_id.in_(ids)).limit(1)
+    ).scalar()
+    if not has_stats:
+        return pd.DataFrame()
+    return pd.read_sql(
+        select(PlayerGameStat).where(PlayerGameStat.game_id.in_(ids)),
+        session.bind,
+    )
+
+
 def _team_features(appearances: pd.DataFrame, window: int) -> pd.DataFrame:
     parts: list[pd.DataFrame] = []
     for _, group in appearances.groupby("team_id"):
@@ -95,7 +109,7 @@ def build_dataset(
     all final games in the DB are used. Rows with too little history to form a
     rolling window are dropped so the model never sees half-formed features.
     """
-    games = _load_games(session, seasons)
+    games = load_final_games(session, seasons)
     if games.empty:
         return Dataset(games, list(FEATURE_COLUMNS), TARGET_COLUMN)
 
@@ -105,7 +119,7 @@ def build_dataset(
     )
 
     # -- team rolling + context, window per team --
-    te = _team_features(_team_appearances(games), window)
+    te = _team_features(team_appearances(games), window)
     for side, team_col in (("home", "home_team_id"), ("away", "away_team_id")):
         side_feats = te.rename(columns={"game_id": "_game_id", "team_id": team_col})
         side_feats = side_feats.rename(
@@ -128,18 +142,8 @@ def build_dataset(
         df = df.drop(columns=["_game_id"])
 
     # -- advanced rolling box metrics from backfilled box scores (no leakage) --
-    has_stats = session.execute(
-        select(PlayerGameStat.id).where(
-            PlayerGameStat.game_id.in_(games["id"].tolist())
-        ).limit(1)
-    ).scalar()
-    if has_stats:
-        stats = pd.read_sql(
-            select(PlayerGameStat).where(
-                PlayerGameStat.game_id.in_(games["id"].tolist())
-            ),
-            session.bind,
-        )
+    stats = load_box_stats(session, games)
+    if not stats.empty:
         box_metrics = team_box_metrics(stats)
         # Every team appearance (not just games with their own box score), so a
         # game still gets trailing box features from its team's prior games.

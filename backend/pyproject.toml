@@ -1,0 +1,35 @@
+[tool.ruff]
+# Keep this explicit: without a config, ruff's rule set drifts between versions
+# and CI starts failing on rules nobody chose.
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "RUF",  # ruff-specific
+]
+
+ignore = [
+    # FastAPI's dependency-injection idiom is `db: Session = Depends(get_db)`.
+    # B008 flags every such call in an argument default; it is a false positive
+    # for this codebase, not a bug.
+    "B008",
+    # TRY004 wants TypeError for invalid argument types. Our pydantic validators
+    # raise ValueError deliberately so FastAPI maps them to a 422 response.
+    "TRY004",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests lean on fixtures and inline payloads where long lines are clearer.
+"tests/*" = ["E501"]
+# Alembic revisions are generated; hand-formatting them fights the tool.
+"migrations/*" = ["E501", "W291"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

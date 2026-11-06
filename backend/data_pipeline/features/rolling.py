@@ -15,7 +15,11 @@ if TYPE_CHECKING:
 _ROLL_COLUMNS = ("roll_pts_for", "roll_pts_against", "roll_margin", "roll_win_rate")
 
 
-def team_rolling(team_games: pd.DataFrame, window: int = 5) -> pd.DataFrame:
+def team_rolling(
+    team_games: pd.DataFrame,
+    window: int = 5,
+    min_periods: int | None = None,
+) -> pd.DataFrame:
     """Add a team's last-``window`` game averages to a per-team game frame.
 
     Expects ``team_games`` sorted time-irrelevantly with numeric columns
@@ -26,14 +30,23 @@ def team_rolling(team_games: pd.DataFrame, window: int = 5) -> pd.DataFrame:
     * ``roll_win_rate`` — share of games won in the window
 
     All are lagged by one game (``shift(1)``) so the most recent prior stretch
-    is used, never the game itself. Early season games with little history
-    produce NaN and are excluded downstream.
+    is used, never the game itself. Games with fewer than ``min_periods`` prior
+    games produce NaN and are excluded downstream.
+
+    Parameters
+    ----------
+    min_periods:
+        Minimum number of prior games required before a rolling value is
+        computed. Defaults to ``window`` (a full window of history), which
+        avoids noisy single-game "averages" early in a season.
     """
+    if min_periods is None:
+        min_periods = window
     out = team_games.sort_values("game_date").copy()
     for src, dst in (("pts_for", "roll_pts_for"), ("pts_against", "roll_pts_against")):
-        out[dst] = out[src].shift(1).rolling(window, min_periods=1).mean()
+        out[dst] = out[src].shift(1).rolling(window, min_periods=min_periods).mean()
 
     margin = (out["pts_for"] - out["pts_against"]).shift(1)
-    out["roll_margin"] = margin.rolling(window, min_periods=1).mean()
-    out["roll_win_rate"] = out["win"].shift(1).rolling(window, min_periods=1).mean()
+    out["roll_margin"] = margin.rolling(window, min_periods=min_periods).mean()
+    out["roll_win_rate"] = out["win"].shift(1).rolling(window, min_periods=min_periods).mean()
     return out

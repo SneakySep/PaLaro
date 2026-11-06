@@ -37,9 +37,24 @@ def test_rolling_uses_only_prior_games() -> None:
     assert row["roll_win_rate"] == pytest.approx(2 / 3)
 
 
-def test_partial_history_early_but_full_later() -> None:
+def test_rows_below_full_window_are_nan() -> None:
+    """Default ``min_periods`` is the full window, so short history is dropped."""
     out = team_rolling(_frame(), window=3)
-    # row 2 has only 2 prior games (rows 0,1)
-    assert out.loc[2, "roll_pts_for"] == pytest.approx((100 + 80) / 2)
+    # row 2 has only 2 prior games (rows 0,1) -> below the 3-game minimum.
+    assert pd.isna(out.loc[2, "roll_pts_for"])
+    assert pd.isna(out.loc[2, "roll_win_rate"])
+    # row 3 is the first row with a full window of prior games.
+    assert pd.notna(out.loc[3, "roll_pts_for"])
     # row 4 uses rows 1,2,3
     assert out.loc[4, "roll_pts_for"] == pytest.approx((80 + 110 + 70) / 3)
+
+
+def test_min_periods_one_allows_partial_history() -> None:
+    """Callers can opt into partial-window averages explicitly."""
+    out = team_rolling(_frame(), window=3, min_periods=1)
+    # row 2 now averages its 2 prior games (rows 0,1).
+    assert out.loc[2, "roll_pts_for"] == pytest.approx((100 + 80) / 2)
+    assert out.loc[2, "roll_pts_against"] == pytest.approx((90 + 95) / 2)
+    assert out.loc[2, "roll_win_rate"] == pytest.approx(1 / 2)
+    # The very first game still has no history at all.
+    assert pd.isna(out.loc[0, "roll_pts_for"])
