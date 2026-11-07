@@ -87,8 +87,10 @@ def test_predict_service_returns_sane_probability(trained_artifact) -> None:
 
     resp = predict(req)
     assert 0.0 <= resp.home_win_prob <= 1.0
-    lo, hi = resp.confidence_interval
-    assert lo <= resp.home_win_prob <= hi
+    # The response deliberately carries no confidence interval: the old Wilson
+    # band was computed from a single sample and was ~[0.09, 0.97] for every
+    # prediction, which is noise rather than uncertainty.
+    assert not hasattr(resp, "confidence_interval")
     # The trainer stamps a UTC build suffix onto the configured base version.
     assert resp.model_version.startswith(settings.model_version)
 
@@ -105,8 +107,7 @@ def test_predict_endpoint_ok(trained_artifact) -> None:
     body = r.json()
     assert body["game_id"] == "G1"
     assert 0.0 <= body["home_win_prob"] <= 1.0
-    lo, hi = body["confidence_interval"]
-    assert lo <= body["home_win_prob"] <= hi
+    assert "confidence_interval" not in body
 
 
 def test_predict_endpoint_missing_feature_400(trained_artifact) -> None:

@@ -13,12 +13,15 @@ Notes
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import date
 from typing import ClassVar
 
 from data_pipeline.ingest.providers.base import DataProvider
 from data_pipeline.ingest.schemas import BoxScore, GameDict, PlayerLineDict, TeamDict
+
+logger = logging.getLogger(__name__)
 
 
 def _to_int(value) -> int | None:
@@ -39,26 +42,30 @@ def _to_float(value) -> float | None:
         return None
 
 
+#: BoxScoreTraditionalV3 column -> our PlayerLineDict field.
+#:
+#: V3 replaced V2 for the 2025-26 season onward: stats.nba.com no longer
+#: publishes V2 data for those games, and V2 returns an EMPTY frame rather than
+#: an error, so a backfill silently writes nothing. V3 also renamed every
+#: column (``personId`` not ``PLAYER_ID``, ``turnovers`` not ``TO``), which is
+#: why the mapping below is spelled out in full rather than derived.
 _RAW_TO_LINE = {
-    "PLAYER_NAME": "player_name",
-    "PLAYER_ID": "nba_player_id",
-    "MIN": "minutes",
-    "PTS": "points",
-    "REB": "rebounds",
-    "AST": "assists",
-    "STL": "steals",
-    "BLK": "blocks",
-    # BoxScoreTraditionalV2 names this column "TO", not "TOV". Using the wrong
-    # key silently yielded None for every player, which made the rolling
-    # turnover features constant zero in both training and serving.
-    "TO": "turnovers",
-    "PF": "personal_fouls",
-    "FGM": "fg_made",
-    "FGA": "fg_att",
-    "FG3M": "fg3_made",
-    "FG3A": "fg3_att",
-    "FTM": "ft_made",
-    "FTA": "ft_att",
+    "nameI": "player_name",
+    "personId": "nba_player_id",
+    "minutes": "minutes",
+    "points": "points",
+    "reboundsTotal": "rebounds",
+    "assists": "assists",
+    "steals": "steals",
+    "blocks": "blocks",
+    "turnovers": "turnovers",
+    "foulsPersonal": "personal_fouls",
+    "fieldGoalsMade": "fg_made",
+    "fieldGoalsAttempted": "fg_att",
+    "threePointersMade": "fg3_made",
+    "threePointersAttempted": "fg3_att",
+    "freeThrowsMade": "ft_made",
+    "freeThrowsAttempted": "ft_att",
 }
 
 _INT_FIELDS = {
@@ -243,22 +250,37 @@ class NBA_APIProvider(DataProvider):
 
     # -- box score -------------------------------------------------------------
     def get_box_score(self, game_id: str) -> BoxScore:
-        from nba_api.stats.endpoints import BoxScoreTraditionalV2
-        from nba_api.stats.static.teams import get_teams
+        """Fetch one game's per-player box score via BoxScoreTraditionalV3.
 
-        id_to_abbr = {int(t["id"]): t["abbreviation"] for t in get_teams()}
+        V3 is required: stats.nba.com stopped publishing V2 box scores as of the
+        2025-26 season, and V2 returns an empty frame (not an error) for those
+        games, which silently produced a backfill that wrote nothing.
 
-        box = BoxScoreTraditionalV2(game_id=game_id)
-        frame = box.player_stats.get_data_frame()
+        Some scheduled games have no published box score yet. The API answers
+        those with HTTP 200 and a stub payload (``teamId=0``, no players,
+        ``statistics: null``), which makes the nba_api parser raise
+        ``AttributeError``. That is missing upstream data, not a failure, so it
+        is reported as an empty box score and the caller skips the game.
+        """
+        from nba_api.stats.endpoints import BoxScoreTraditionalV3
+
+        try:
+            box = BoxScoreTraditionalV3(game_id=game_id)
+            frame = box.player_stats.get_data_frame()
+        except AttributeError:
+            # Stub payload: the game has no published box score yet.
+            logger.warning("no box score published for %s; skipping", game_id)
+            return BoxScore(nba_game_id=game_id, player_lines=[])
 
         player_lines: list[PlayerLineDict] = []
         for raw in frame.to_dict("records"):
-            player_id = _to_int(raw.get("PLAYER_ID"))
+            player_id = _to_int(raw.get("personId"))
             if player_id is None:
                 # Skip aggregate / blank rows that carry no player id.
                 continue
             raw = dict(raw)
-            raw["team_abbr"] = id_to_abbr.get(_to_int(raw.get("TEAM_ID")), "")
+            # V3 carries the team tricode inline, so no id lookup is needed.
+            raw["team_abbr"] = raw.get("teamTricode") or ""
             player_lines.append(self._convert_line(game_id, raw))
         return BoxScore(nba_game_id=game_id, player_lines=player_lines)
 

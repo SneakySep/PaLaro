@@ -9,7 +9,6 @@ export interface PredictionResponse {
   home_team: string;
   away_team: string;
   home_win_prob: number; // 0..1
-  confidence_interval: [number, number];
   model_version: string;
 }
 

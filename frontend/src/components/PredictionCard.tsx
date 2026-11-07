@@ -8,8 +8,6 @@ interface PredictionCardProps {
 }
 
 export function PredictionCard({ prediction, index = 0 }: PredictionCardProps) {
-  const [lower, upper] = prediction.confidence_interval ?? [0, 0];
-
   return (
     <motion.article
       initial={{ opacity: 0, y: 12 }}
@@ -41,28 +39,6 @@ export function PredictionCard({ prediction, index = 0 }: PredictionCardProps) {
         homeTeam={prediction.home_team}
         awayTeam={prediction.away_team}
       />
-
-      {/* Confidence interval */}
-      <div className="mt-4 flex items-center gap-2 border-t border-zinc-100 pt-3 text-xs text-zinc-500 dark:border-zinc-800">
-        <span>Confidence</span>
-        <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-          <motion.div
-            className="absolute inset-y-0 rounded-full bg-emerald-500/70 dark:bg-emerald-400/70"
-            initial={{ scaleX: 0 }}
-            whileInView={{ scaleX: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5, delay: 0.4 }}
-            style={{
-              left: `${lower * 100}%`,
-              width: `${(upper - lower) * 100}%`,
-              transformOrigin: "left",
-            }}
-          />
-        </div>
-        <span>
-          {Math.round(lower * 100)}–{Math.round(upper * 100)}%
-        </span>
-      </div>
     </motion.article>
   );
 }

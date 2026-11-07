@@ -34,17 +34,19 @@ def _already_has_box(writer: PostgresWriter, nba_game_id: str) -> bool:
 
 
 def _fetch_box(provider: NBA_APIProvider, game_id: str, attempts: int = 5) -> dict:
-    """Fetch one box score, retrying transient network failures with backoff.
+    """Fetch one box score, retrying transient failures with backoff.
 
-    stats.nba.com intermittently rate-limits/briefly blocks rapid request
-    bursts; a short backoff ride it out instead of killing the whole backfill.
+    stats.nba.com intermittently rate-limits, briefly blocks rapid request
+    bursts, or returns a malformed payload that makes the endpoint parser raise
+    ``AttributeError`` (a ``None`` team-stats block). None of those are fatal
+    for a single game, so retry the whole fetch rather than aborting the run.
     """
     delay = 2.0
     last: Exception | None = None
     for i in range(attempts):
         try:
             return provider.get_box_score(game_id)
-        except requests.exceptions.RequestException as exc:
+        except (requests.exceptions.RequestException, AttributeError, KeyError) as exc:
             last = exc
             print(f"    retry {i + 1}/{attempts} for {game_id} ({exc.__class__.__name__}) ...")
             time.sleep(delay)
@@ -127,7 +129,7 @@ def run_backfill(args: argparse.Namespace) -> int:
                 print(f"  box score {game_id} ...")
                 try:
                     box = _fetch_box(provider, game_id)
-                except requests.exceptions.RequestException as exc:
+                except Exception as exc:  # one bad game must not abort the season
                     consecutive_failures += 1
                     print(f"  skipped {game_id}: {exc.__class__.__name__}")
                     # A single bad/edge-case game shouldn't abort the season;

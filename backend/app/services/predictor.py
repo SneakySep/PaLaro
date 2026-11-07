@@ -46,13 +46,19 @@ class PredictRequest(BaseModel):
 
 
 class PredictionResponse(BaseModel):
-    """Shape the frontend expects for a game prediction."""
+    """Shape the frontend expects for a game prediction.
+
+    Deliberately carries no confidence interval. The previous Wilson interval
+    was computed from a single sample (``n=1``), so it returned roughly
+    [0.09, 0.97] for every prediction regardless of the model's actual
+    certainty. A constant band is not uncertainty; it is noise dressed as
+    precision, and it is better to omit the field than to ship it.
+    """
 
     game_id: str
     home_team: str
     away_team: str
     home_win_prob: float  # 0..1
-    confidence_interval: list[float]  # [lower, upper] on home_win_prob
     model_version: str
 
 
@@ -97,25 +103,6 @@ def aligned_feature_frame(
     return pd.DataFrame([row], columns=feature_columns)
 
 
-def _wilson_interval(prob: float, z: float = 1.96) -> list[float]:
-    """95% Wilson score interval around a single predicted probability.
-
-    XGBoost gives a point estimate, so we wrap it in a binomial-sampling
-    interval. For a single sample this is a loose but conservative band; a more
-    rigorous uncertainty estimate (out-of-fold calibration / bagged quantiles)
-    is a documented follow-up.
-    """
-    n = 1
-    z2 = z * z
-    p = min(max(prob, 0.0), 1.0)
-    denom = 1 + z2 / n
-    centre = (p + z2 / (2 * n)) / denom
-    margin = z * ((p * (1 - p) / n + z2 / (4 * n * n)) ** 0.5) / denom
-    lo = min(max(centre - margin, 0.0), 1.0)
-    hi = min(max(centre + margin, 0.0), 1.0)
-    return [round(lo, 4), round(hi, 4)]
-
-
 def predict(request: PredictRequest) -> PredictionResponse:
     """Produce a :class:`PredictionResponse` for a single game request."""
     artifact = get_artifact()
@@ -134,6 +121,5 @@ def predict(request: PredictRequest) -> PredictionResponse:
         home_team=request.home_team,
         away_team=request.away_team,
         home_win_prob=round(prob, 4),
-        confidence_interval=_wilson_interval(prob),
         model_version=artifact.version,
     )

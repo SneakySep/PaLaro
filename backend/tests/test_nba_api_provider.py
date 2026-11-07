@@ -59,40 +59,43 @@ def test_game_from_rows_only_away_present():
 
 def test_convert_line_full_row():
     provider = NBA_APIProvider(use_sleep=False)
+    # BoxScoreTraditionalV3 column names (V2 is no longer published).
     raw = {
-        "PLAYER_NAME": "LeBron James",
-        "PLAYER_ID": 2544,
-        "TEAM_ID": 1610612747,
-        "MIN": "37:11",
-        "PTS": 28,
-        "REB": 9,
-        "AST": 8,
-        "STL": 2,
-        "BLK": 1,
-        "TO": 3,
-        "PF": 2,
-        "FGM": 10,
-        "FGA": 19,
-        "FG3M": 2,
-        "FG3A": 5,
-        "FTM": 6,
-        "FTA": 8,
+        "nameI": "L. James",
+        "personId": 2544,
+        "teamId": 1610612747,
+        "minutes": "37:11",
+        "points": 28,
+        "reboundsTotal": 9,
+        "assists": 8,
+        "steals": 2,
+        "blocks": 1,
+        "turnovers": 3,
+        "foulsPersonal": 2,
+        "fieldGoalsMade": 10,
+        "fieldGoalsAttempted": 19,
+        "threePointersMade": 2,
+        "threePointersAttempted": 5,
+        "freeThrowsMade": 6,
+        "freeThrowsAttempted": 8,
     }
     raw["team_abbr"] = "LAL"
     line = provider._convert_line("0022300002", raw)
     assert line["nba_player_id"] == 2544
-    assert line["player_name"] == "LeBron James"
+    assert line["player_name"] == "L. James"
     assert line["points"] == 28
     assert line["fg_att"] == 19
     assert line["minutes"] == pytest.approx(37.18, abs=0.01)
-    # Regression: the raw column is "TO", not "TOV". Reading the wrong key
-    # produced None for every player and silently zeroed the turnover features.
+    # Regression: turnovers must survive the mapping. The V2 mapping used "TOV"
+    # (the real column was "TO") and silently produced None for every player.
     assert line["turnovers"] == 3
+    assert line["rebounds"] == 9
+    assert line["fg3_att"] == 5
 
 
 def test_convert_line_skips_blank_stats():
     provider = NBA_APIProvider(use_sleep=False)
-    raw = {"PLAYER_ID": 999, "PLAYER_NAME": "X", "PTS": "", "REB": "",
+    raw = {"personId": 999, "nameI": "X", "points": "", "reboundsTotal": "",
            "team_abbr": "BOS"}
     line = provider._convert_line("0022300002", raw)
     assert line["points"] is None

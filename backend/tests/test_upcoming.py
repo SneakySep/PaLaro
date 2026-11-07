@@ -256,8 +256,7 @@ def test_upcoming_predictions_service(db_session, monkeypatch) -> None:
     assert p.game_date == date(2023, 10, 8)
     assert p.home_win_prob == pytest.approx(0.7)  # stub predict_proba
     assert p.model_version == "test"
-    lo, hi = p.confidence_interval
-    assert lo <= p.home_win_prob <= hi
+    assert not hasattr(p, "confidence_interval")
 
     # Horizon grows with `days` (ordered by game_date).
     preds14 = upcoming_predictions(db_session, days=14, today=date(2023, 10, 7))
