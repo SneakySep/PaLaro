@@ -14,6 +14,7 @@ from pydantic import BaseModel, field_validator
 from xgboost.core import XGBoostError
 
 from app.core.config import settings
+from app.services.explain import Contribution, explain
 from data_pipeline.training.model import ModelArtifact
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,8 @@ class PredictionResponse(BaseModel):
     away_team: str
     home_win_prob: float  # 0..1
     model_version: str
+    explanations: list[Contribution] = []
+    """Top features driving this prediction, largest effect first."""
 
 
 class FeatureMismatchError(ValueError):
@@ -122,4 +125,5 @@ def predict(request: PredictRequest) -> PredictionResponse:
         away_team=request.away_team,
         home_win_prob=round(prob, 4),
         model_version=artifact.version,
+        explanations=explain(artifact, frame, prob),
     )
