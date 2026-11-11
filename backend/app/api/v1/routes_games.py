@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.session import get_db
@@ -31,6 +31,7 @@ class SeasonOut(BaseModel):
 
 @router.get("/games", response_model=list[GameOut])
 def list_games(
+    response: Response,
     status: str | None = None,
     team: str | None = Query(
         default=None,
@@ -47,30 +48,40 @@ def list_games(
 
     Filters compose: pass ``status=scheduled&team=BOS`` for Boston's upcoming
     games, or ``date_from``/``date_to`` to page through a date window. Results
-    are ordered newest-first and paginated with ``limit``/``offset``.
+    are ordered newest-first and paginated with ``limit``/``offset``. The total
+    number of matching rows is returned in the ``X-Total-Count`` header so the
+    client can build pagination without a second request.
     """
-    stmt = (
-        select(Game)
-        .options(joinedload(Game.home_team), joinedload(Game.away_team))
-        .order_by(Game.game_date.desc(), Game.id.desc())
-        .limit(limit)
-        .offset(offset)
-    )
+    conditions = []
     if status:
-        stmt = stmt.where(Game.status == status)
+        conditions.append(Game.status == status)
     if season is not None:
-        stmt = stmt.where(Game.season == season)
+        conditions.append(Game.season == season)
     if date_from is not None:
-        stmt = stmt.where(Game.game_date >= date_from)
+        conditions.append(Game.game_date >= date_from)
     if date_to is not None:
-        stmt = stmt.where(Game.game_date <= date_to)
+        conditions.append(Game.game_date <= date_to)
     if team:
         abbr = team.upper()
         team_id = db.scalar(select(Team.id).where(Team.abbr == abbr))
         if team_id is None:
+            response.headers["X-Total-Count"] = "0"
             return []
-        stmt = stmt.where((Game.home_team_id == team_id) | (Game.away_team_id == team_id))
+        conditions.append(
+            (Game.home_team_id == team_id) | (Game.away_team_id == team_id)
+        )
 
+    total = db.scalar(select(func.count(Game.id)).where(*conditions)) or 0
+    response.headers["X-Total-Count"] = str(total)
+
+    stmt = (
+        select(Game)
+        .options(joinedload(Game.home_team), joinedload(Game.away_team))
+        .where(*conditions)
+        .order_by(Game.game_date.desc(), Game.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
     games = db.execute(stmt).scalars().all()
     return [
         GameOut(
@@ -90,8 +101,6 @@ def list_games(
 @router.get("/seasons", response_model=list[SeasonOut])
 def list_seasons(db: Session = Depends(get_db)) -> list[SeasonOut]:
     """Seasons present in the database, newest first, with game counts."""
-    from sqlalchemy import func
-
     rows = db.execute(
         select(Game.season, func.count(Game.id))
         .where(Game.season.is_not(None))

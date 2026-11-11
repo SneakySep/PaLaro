@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -111,14 +111,21 @@ def list_teams(db: Session = Depends(get_db)) -> list[TeamOut]:
 @router.get("/teams/{abbr}", response_model=TeamDetail)
 def team_detail(
     abbr: str,
-    season: int | None = None,
+    season: int | None = Query(
+        default=None,
+        description="Season start year; defaults to the team's latest season",
+    ),
+    all_seasons: bool = Query(
+        default=False,
+        description="Combine every season instead of using the latest one",
+    ),
     db: Session = Depends(get_db),
 ) -> TeamDetail:
     """Profile for one team: record, splits, streak, and schedule.
 
-    Pass ``?season=2026`` to scope the stats to a single season. Without it the
-    numbers span every season in the database, which mixes eras and is rarely
-    what a reader wants — the UI defaults to the latest season.
+    Without ``season`` the latest season is used, because combining seasons
+    mixes eras and makes the record misleading. Pass ``all_seasons=true`` for
+    the combined view. An explicit ``season`` wins over the default.
     """
     team = db.scalar(select(Team).where(Team.abbr == abbr.upper()))
     if team is None:
@@ -139,6 +146,11 @@ def team_detail(
             .order_by(Game.season.desc())
         ).scalars()
     ]
+
+    if all_seasons:
+        season = None
+    elif season is None and seasons:
+        season = seasons[0]
 
     stmt = team_games
     if season is not None:
