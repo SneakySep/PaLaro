@@ -1,29 +1,26 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { readableOn, teamColor } from "@/lib/teamColors";
+import { teamColor } from "@/lib/teamColors";
 
 interface WinProbabilityBarProps {
   /** 0..1 */
   homeProb: number;
   homeTeam: string;
   awayTeam: string;
-  /** Compact variant for dense lists. */
-  size?: "sm" | "md";
 }
 
 /**
  * Split bar showing each team's win probability in its own brand color.
  *
- * The previous version set both `scaleX` and `width` on the same element, so
- * the animation and the layout disagreed and the bar could render at the wrong
- * length. This version animates `width` only, which is what the layout uses.
+ * The percentages sit above the bar in the display face so the number, not
+ * the color, is the first thing read. The bar animates width only, which is
+ * what the layout uses.
  */
 export function WinProbabilityBar({
   homeProb,
   homeTeam,
   awayTeam,
-  size = "md",
 }: WinProbabilityBarProps) {
   const clamped = Math.min(Math.max(homeProb, 0), 1);
   const homePct = Math.round(clamped * 100);
@@ -31,62 +28,48 @@ export function WinProbabilityBar({
 
   const home = teamColor(homeTeam);
   const away = teamColor(awayTeam);
-  const homeFg = readableOn(home.primary);
-  const awayFg = readableOn(away.primary);
-
-  const height = size === "sm" ? "h-2" : "h-3.5";
-  // Below ~18% the label cannot fit inside its slice; the percentage row below
-  // always carries the number, so hiding it here loses nothing.
-  const showInlineLabels = homePct >= 18 && awayPct >= 18;
 
   return (
     <div className="w-full">
+      <div className="flex items-end justify-between gap-4">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <span className="font-display text-[30px] font-semibold leading-none tracking-[-0.01em] tabular-nums text-ink">
+            {homePct}
+            <span className="ml-0.5 text-[16px] font-medium text-muted">%</span>
+          </span>
+          <span className="truncate text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+            {homeTeam}
+          </span>
+        </div>
+        <div className="flex min-w-0 flex-row-reverse items-baseline gap-2 text-right">
+          <span className="font-display text-[30px] font-semibold leading-none tracking-[-0.01em] tabular-nums text-ink">
+            {awayPct}
+            <span className="ml-0.5 text-[16px] font-medium text-muted">%</span>
+          </span>
+          <span className="truncate text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+            {awayTeam}
+          </span>
+        </div>
+      </div>
+
       <div
-        className={`relative flex w-full overflow-hidden rounded-full ${height}`}
+        className="relative mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-surface-muted"
         role="img"
         aria-label={`${homeTeam} ${homePct} percent, ${awayTeam} ${awayPct} percent`}
       >
         <motion.div
-          className="flex items-center justify-start pl-2"
           style={{ backgroundColor: home.primary }}
           initial={{ width: "50%" }}
           animate={{ width: `${homePct}%` }}
           transition={{ duration: 0.6, ease: "easeOut" }}
-        >
-          {showInlineLabels && (
-            <span
-              className="text-[10px] font-bold tabular-nums"
-              style={{ color: homeFg }}
-            >
-              {homePct}%
-            </span>
-          )}
-        </motion.div>
+        />
         <motion.div
-          className="flex flex-1 items-center justify-end pr-2"
+          className="flex-1"
           style={{ backgroundColor: away.primary }}
-          initial={{ opacity: 0.9 }}
+          initial={{ opacity: 0.85 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.6 }}
-        >
-          {showInlineLabels && (
-            <span
-              className="text-[10px] font-bold tabular-nums"
-              style={{ color: awayFg }}
-            >
-              {awayPct}%
-            </span>
-          )}
-        </motion.div>
-      </div>
-
-      <div className="mt-1.5 flex items-center justify-between text-xs">
-        <span className="font-semibold tabular-nums text-zinc-700 dark:text-zinc-200">
-          {homePct}%
-        </span>
-        <span className="font-semibold tabular-nums text-zinc-700 dark:text-zinc-200">
-          {awayPct}%
-        </span>
+        />
       </div>
     </div>
   );

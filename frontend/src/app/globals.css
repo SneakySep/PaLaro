@@ -4,36 +4,299 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --canvas: #f4f5f1;
+  --surface: #fcfcf9;
+  --surface-muted: #eceee8;
+  --ink: #151714;
+  --muted: #666c63;
+  --line: #e0e3db;
+  --line-strong: #c9cec2;
+  --signal: #b23a0c;
+  --signal-soft: #f7e7df;
+  --skeleton-highlight: #f8f9f5;
+  --panel-shadow: 0 1px 0 rgb(255 255 255 / 0.75) inset,
+    0 18px 40px -32px rgb(21 23 20 / 0.4);
+  --panel-shadow-hover: 0 1px 0 rgb(255 255 255 / 0.8) inset,
+    0 24px 46px -30px rgb(21 23 20 / 0.45);
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  color-scheme: light;
 }
 
 .dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  --canvas: #0b0d0b;
+  --surface: #131613;
+  --surface-muted: #191d19;
+  --ink: #f1f3ee;
+  --muted: #9aa096;
+  --line: #262b24;
+  --line-strong: #394034;
+  --signal: #ff8a5c;
+  --signal-soft: #2a1710;
+  --skeleton-highlight: #1e241d;
+  --panel-shadow: 0 1px 0 rgb(255 255 255 / 0.035) inset,
+    0 24px 48px -34px rgb(0 0 0 / 0.9);
+  --panel-shadow-hover: 0 1px 0 rgb(255 255 255 / 0.05) inset,
+    0 28px 52px -32px rgb(0 0 0 / 0.95);
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  /* Make native date pickers, selects, and scrollbars follow the theme. */
+  color-scheme: dark;
 }
 
 @theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-signal: var(--signal);
+  --color-signal-soft: var(--signal-soft);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-barlow);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  /* Use the loaded Geist variable. The previous Arial fallback meant the
-     downloaded font was never actually applied. */
+  background: var(--canvas);
+  color: var(--ink);
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--signal);
+  color: #ffffff;
+}
+
+/* A visible keyboard focus ring everywhere, including custom-styled controls.
+   Kept in the base layer so intentionally custom focus styles can override it. */
+@layer base {
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: 2px;
+  }
+}
+
+/* ---------- Surfaces ---------- */
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 1.125rem;
+  box-shadow: var(--panel-shadow);
+}
+
+.panel-hover {
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.panel-hover:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--panel-shadow-hover);
+  transform: translateY(-1px);
+}
+
+/* ---------- Controls ---------- */
+
+.control {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.375rem;
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0 0.7rem;
+  font-size: 0.75rem;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+.control:hover {
+  border-color: var(--line-strong);
+}
+
+.control:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* Search inputs with a leading icon and trailing clear button. */
+.control-search {
+  padding-left: 2.25rem;
+  padding-right: 2.25rem;
+}
+
+/* 16px avoids iOS Safari zooming into focused form controls. */
+@media (max-width: 640px) {
+  .control {
+    font-size: 1rem;
+  }
+}
+
+.select-control {
+  appearance: none;
+  padding-right: 2rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666c63' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-position: right 0.65rem center;
+  background-repeat: no-repeat;
+}
+
+.dark .select-control {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239aa096' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  background: var(--surface);
+  padding: 0 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--ink);
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.btn:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-muted);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.text-link {
+  color: var(--signal);
+  font-weight: 500;
+  text-underline-offset: 3px;
+}
+
+.text-link:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Type ---------- */
+
+.display {
+  font-family: var(--font-barlow), var(--font-geist-sans), ui-sans-serif,
+    system-ui, sans-serif;
+  font-stretch: condensed;
+}
+
+/* ---------- Texture ---------- */
+
+.court-lines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, var(--line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: linear-gradient(to bottom, black 10%, transparent 82%);
+  -webkit-mask-image: linear-gradient(to bottom, black 10%, transparent 82%);
+  opacity: 0.38;
+}
+
+.dark .court-lines {
+  opacity: 0.24;
+}
+
+.court-lines::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -320px;
+  width: 520px;
+  height: 520px;
+  transform: translateX(-50%);
+  border: 1px solid var(--line-strong);
+  border-radius: 9999px;
+}
+
+@media (max-width: 640px) {
+  .court-lines::after {
+    top: -280px;
+    width: 420px;
+    height: 420px;
+  }
+}
+
+/* ---------- Loading ---------- */
+
+.skeleton {
+  background: linear-gradient(
+    100deg,
+    var(--surface-muted) 28%,
+    var(--skeleton-highlight) 45%,
+    var(--surface-muted) 62%
+  );
+  background-size: 300% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
 }
 
 /* Respect the OS preference only until the user picks a theme. */
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --canvas: #0b0d0b;
+    --surface: #131613;
+    --surface-muted: #191d19;
+    --ink: #f1f3ee;
+    --muted: #9aa096;
+    --line: #262b24;
+    --line-strong: #394034;
+    --signal: #ff8a5c;
+    --signal-soft: #2a1710;
+    --skeleton-highlight: #1e241d;
+    --panel-shadow: 0 1px 0 rgb(255 255 255 / 0.035) inset,
+      0 24px 48px -34px rgb(0 0 0 / 0.9);
+    --panel-shadow-hover: 0 1px 0 rgb(255 255 255 / 0.05) inset,
+      0 28px 52px -32px rgb(0 0 0 / 0.95);
+    --background: var(--canvas);
+    --foreground: var(--ink);
+    color-scheme: dark;
+  }
+}
+
+/* Framer Motion handles its own reduced-motion setting; this covers CSS
+   animations such as loading pulses and spinners. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

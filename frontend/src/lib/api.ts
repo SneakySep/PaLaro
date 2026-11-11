@@ -10,8 +10,30 @@ import type {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+/** Error carrying the HTTP status plus the API's `detail` message when present. */
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 async function parse<T>(res: Response): Promise<T> {
-  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    let message = `Request failed (${res.status})`;
+    try {
+      const body = (await res.json()) as { detail?: unknown };
+      if (typeof body.detail === "string" && body.detail.trim()) {
+        message = body.detail;
+      }
+    } catch {
+      // The body was not JSON; keep the generic status message.
+    }
+    throw new ApiError(res.status, message);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -29,7 +51,13 @@ export interface GameFilters {
   offset?: number;
 }
 
-export async function getGames(filters: GameFilters = {}): Promise<Game[]> {
+export interface GamesPage {
+  games: Game[];
+  /** Total matching rows, independent of the current limit/offset. */
+  total: number;
+}
+
+export async function getGames(filters: GameFilters = {}): Promise<GamesPage> {
   const params = new URLSearchParams();
   if (filters.status) params.set("status", filters.status);
   if (filters.team) params.set("team", filters.team);
@@ -39,7 +67,15 @@ export async function getGames(filters: GameFilters = {}): Promise<Game[]> {
   if (filters.limit != null) params.set("limit", String(filters.limit));
   if (filters.offset != null) params.set("offset", String(filters.offset));
   const qs = params.toString();
-  return parse<Game[]>(await fetch(`${API_URL}/api/v1/games${qs ? `?${qs}` : ""}`));
+
+  const res = await fetch(`${API_URL}/api/v1/games${qs ? `?${qs}` : ""}`);
+  const games = await parse<Game[]>(res);
+  const header = res.headers.get("X-Total-Count");
+  const parsedTotal = header != null ? Number(header) : Number.NaN;
+  return {
+    games,
+    total: Number.isFinite(parsedTotal) ? parsedTotal : games.length,
+  };
 }
 
 export async function getTeams(): Promise<Team[]> {
@@ -48,11 +84,17 @@ export async function getTeams(): Promise<Team[]> {
 
 export async function getTeamDetail(
   abbr: string,
-  season?: number
+  season?: number,
+  allSeasons = false
 ): Promise<TeamDetail> {
-  const qs = season != null ? `?season=${season}` : "";
+  const params = new URLSearchParams();
+  if (season != null) params.set("season", String(season));
+  if (allSeasons) params.set("all_seasons", "true");
+  const qs = params.toString();
   return parse<TeamDetail>(
-    await fetch(`${API_URL}/api/v1/teams/${encodeURIComponent(abbr)}${qs}`)
+    await fetch(
+      `${API_URL}/api/v1/teams/${encodeURIComponent(abbr)}${qs ? `?${qs}` : ""}`
+    )
   );
 }
 
@@ -70,11 +112,4 @@ export async function getUpcomingPredictions(
   return parse<UpcomingPrediction[]>(
     await fetch(`${API_URL}/api/v1/predict/upcoming?days=${days}`)
   );
-}
-
-/** ISO date (YYYY-MM-DD) offset from today by `days`. */
-export function isoDate(days = 0): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
 }

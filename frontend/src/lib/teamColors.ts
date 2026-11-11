@@ -56,6 +56,17 @@ export function teamColor(abbr: string): TeamColor {
   return TEAM_COLORS[abbr?.toUpperCase()] ?? FALLBACK;
 }
 
+/**
+ * Official primary logo bundled under `public/team-logos`.
+ *
+ * The assets are kept local so the dashboard never depends on a third-party
+ * CDN and logos do not flash in after first paint.
+ */
+export function teamLogo(abbr: string): string | null {
+  const key = abbr?.toUpperCase();
+  return key && TEAM_COLORS[key] ? `/team-logos/${key}.svg` : null;
+}
+
 /** Relative luminance per WCAG 2.1, used to pick readable text on a color. */
 function luminance(hex: string): number {
   const clean = hex.replace("#", "");

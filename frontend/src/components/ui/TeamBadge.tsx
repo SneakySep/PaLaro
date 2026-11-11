@@ -1,25 +1,37 @@
-import { readableOn, teamColor } from "@/lib/teamColors";
+import Image from "next/image";
+import { readableOn, teamColor, teamLogo } from "@/lib/teamColors";
 
 interface TeamBadgeProps {
   abbr: string;
-  /** `sm` for dense rows, `md` for cards, `lg` for the hero matchup. */
-  size?: "sm" | "md" | "lg";
-  /** Show the full team name beside the badge. */
+  /** `xs` for filter chips, `sm` for dense rows, `md` for controls, `lg` for cards and the drawer. */
+  size?: "xs" | "sm" | "md" | "lg" | "xl";
+  /** Show the full team name beside the logo. */
   showName?: boolean;
   className?: string;
 }
 
-const SIZES = {
-  sm: "h-6 w-6 text-[9px]",
-  md: "h-9 w-9 text-[11px]",
-  lg: "h-12 w-12 text-sm",
+const TILE_SIZES = {
+  xs: "h-5 w-5 rounded-[5px] p-[1px]",
+  sm: "h-7 w-7 rounded-[7px] p-[2px]",
+  md: "h-10 w-10 rounded-[10px] p-1",
+  lg: "h-14 w-14 rounded-[12px] p-1.5",
+  xl: "h-[72px] w-[72px] rounded-[16px] p-2",
+} as const;
+
+const FALLBACK_SIZES = {
+  xs: "text-[8.5px]",
+  sm: "text-[9.5px]",
+  md: "text-[11.5px]",
+  lg: "text-[15px]",
+  xl: "text-[18px]",
 } as const;
 
 /**
- * A team's abbreviation rendered on its brand color.
+ * A team's official logo on a small chalk plate.
  *
- * Text color is derived from the brand color's luminance so light primaries
- * (SAS, BOS) get dark text instead of unreadable white.
+ * The plate keeps black-and-white marks (Nets, Spurs) readable in dark mode
+ * without tinting or altering the official colors. If an asset is ever
+ * missing, the component falls back to the old brand-color abbreviation tile.
  */
 export function TeamBadge({
   abbr,
@@ -28,23 +40,35 @@ export function TeamBadge({
   className = "",
 }: TeamBadgeProps) {
   const color = teamColor(abbr);
-  const fg = readableOn(color.primary);
+  const logo = teamLogo(abbr);
 
   return (
     <span className={`inline-flex items-center gap-2 ${className}`}>
-      <span
-        className={`inline-flex shrink-0 items-center justify-center rounded-lg font-bold tracking-tight ring-1 ring-black/10 dark:ring-white/15 ${SIZES[size]}`}
-        style={{ backgroundColor: color.primary, color: fg }}
-        aria-hidden="true"
-      >
-        {abbr}
-      </span>
-      {showName && (
-        <span className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-          {color.name}
+      {logo ? (
+        <span
+          className={`inline-flex shrink-0 items-center justify-center bg-[#f4f3ec] ring-1 ring-black/10 dark:bg-[#f1f0e9] dark:ring-white/20 ${TILE_SIZES[size]}`}
+          aria-hidden="true"
+        >
+          <Image
+            src={logo}
+            alt=""
+            width={80}
+            height={80}
+            className="h-full w-full object-contain"
+          />
+        </span>
+      ) : (
+        <span
+          className={`font-display inline-flex shrink-0 items-center justify-center font-semibold tracking-[0.02em] ring-1 ring-black/10 dark:ring-white/15 ${TILE_SIZES[size]} ${FALLBACK_SIZES[size]}`}
+          style={{ backgroundColor: color.primary, color: readableOn(color.primary) }}
+          aria-hidden="true"
+        >
+          {abbr}
         </span>
       )}
-      <span className="sr-only">{abbr}</span>
+      {showName && (
+        <span className="text-sm font-medium text-ink">{color.name}</span>
+      )}
     </span>
   );
 }
